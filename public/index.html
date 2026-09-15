@@ -219,6 +219,7 @@ let state = {
   menu:[], inventory:[], customers:[], promos:[], orders:[], auditLog:[], settings:{},
   cart:[], cartCustomer:"", cartPromo:"", cartTable:"", cartPayment:"Tunai", cartCash:"",
   menuQuery:"", reportFilter:"all", editingMenuId:null, showMenuForm:false,
+  editingInventoryId:null, showInventoryForm:false,
 };
 
 const NAV_DEFS = [
@@ -538,7 +539,8 @@ function renderPage(){
     case "settings": el.innerHTML = pageSettings(); wireSettingsInputs(); break;
   }
   if(state.showMenuForm) renderMenuFormModal();
-  else if(document.getElementById("modal-root").querySelector(".menu-form-modal")) closeModal();
+  else if(state.showInventoryForm) renderInventoryFormModal();
+  else if(document.getElementById("modal-root").querySelector(".menu-form-modal, .inventory-form-modal")) closeModal();
 }
 function wirePOSInputs(){
   const s = document.getElementById("menu-search"); if(s) s.oninput = e=>setMenuQuery(e.target.value);
@@ -729,9 +731,61 @@ function pageInventory(){
     const low = i.stock<=i.min_stock;
     return `<tr><td>${i.name}</td><td>${i.stock} ${i.unit}</td>
       <td><span class="pill ${low?"pill-batal":"pill-proses"}">${low?"Stok Menipis":"Aman"}</span></td>
-      <td><button class="icon-btn" onclick="adjustStock('${i.id}',-1)">−</button> <button class="icon-btn" onclick="adjustStock('${i.id}',5)">+</button></td></tr>`;
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="icon-btn" onclick="adjustStock('${i.id}',-1)">−</button>
+        <button class="icon-btn" onclick="adjustStock('${i.id}',5)">+</button>
+        <button class="btn-mini" onclick="openInventoryForm('${i.id}')">Edit</button>
+        <button class="btn-mini ghost-danger" onclick="deleteInventoryItem('${i.id}')">Hapus</button>
+      </td></tr>`;
   }).join("");
-  return `<div class="panel" style="padding:0;overflow:hidden;"><table><thead><tr><th>Item</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `
+    <div style="margin-bottom:16px;"><button class="btn-mini primary" onclick="openInventoryForm(null)">+ Tambah Item Inventaris</button></div>
+    <div class="panel" style="padding:0;overflow:hidden;"><table><thead><tr><th>Item</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function openInventoryForm(invId){ state.editingInventoryId = invId || null; state.showInventoryForm = true; render(); }
+function closeInventoryForm(){ state.showInventoryForm = false; state.editingInventoryId = null; render(); }
+
+function renderInventoryFormModal(){
+  const editing = state.editingInventoryId ? state.inventory.find(i=>i.id===state.editingInventoryId) : null;
+  document.getElementById("modal-root").innerHTML = `
+    <div class="modal-backdrop inventory-form-modal" onclick="if(event.target===this) closeInventoryForm()">
+      <div class="modal-box">
+        <div class="modal-title disp">${editing?"Edit Item Inventaris":"Tambah Item Inventaris"} <button class="modal-close" onclick="closeInventoryForm()">×</button></div>
+        <div class="form-field"><label>Nama Item</label><input class="textbox" style="margin-top:0;" id="if-name" value="${editing?editing.name:""}" placeholder="Contoh: Ayam Katsu"></div>
+        <div class="form-field"><label>Satuan</label><input class="textbox" style="margin-top:0;" id="if-unit" value="${editing?editing.unit:""}" placeholder="porsi / botol / pcs"></div>
+        ${!editing ? `<div class="form-field"><label>Stok Awal</label><input class="textbox" style="margin-top:0;" id="if-stock" type="number" value="0"></div>` : ""}
+        <div class="form-field"><label>Batas Stok Menipis</label><input class="textbox" style="margin-top:0;" id="if-minstock" type="number" value="${editing?editing.min_stock:10}"></div>
+        <button class="btn-checkout" onclick="saveInventoryForm()">Simpan Permanen</button>
+      </div>
+    </div>`;
+}
+
+async function saveInventoryForm(){
+  const name = document.getElementById("if-name").value.trim();
+  const unit = document.getElementById("if-unit").value.trim();
+  const minStock = parseFloat(document.getElementById("if-minstock").value) || 0;
+  if(!name || !unit){ toast("Nama item dan satuan wajib diisi.", "error"); return; }
+
+  const isEditing = !!state.editingInventoryId;
+  setSyncing(true);
+  try{
+    if(isEditing){
+      await api("PUT", `/api/inventory/${state.editingInventoryId}`, {name, unit, minStock});
+    } else {
+      const stock = parseFloat(document.getElementById("if-stock").value) || 0;
+      await api("POST", "/api/inventory", {name, unit, stock, minStock});
+    }
+    state.showInventoryForm = false; state.editingInventoryId = null;
+    await loadAllData();
+    toast(isEditing ? "Item inventaris diperbarui permanen." : "Item inventaris baru tersimpan permanen.");
+  }catch(e){ setSyncing(false, true); toast(e.message, "error"); }
+}
+
+async function deleteInventoryItem(id){
+  setSyncing(true);
+  try{ await api("DELETE", `/api/inventory/${id}`); await loadAllData(); toast("Item inventaris dihapus permanen."); }
+  catch(e){ setSyncing(false, true); toast(e.message, "error"); }
 }
 
 function pageReports(){
@@ -768,8 +822,17 @@ function pageCustomers(){
     <div style="font-size:12px;color:#8A8377;margin-bottom:10px;">${c.phone||""}</div>
     <div class="row-line" style="border:none;padding:4px 0;"><span>Total Order</span><b>${c.total_orders}</b></div>
     <div class="row-line" style="border:none;padding:4px 0;"><span>Total Belanja</span><b>${rupiah(c.total_spent)}</b></div>
-    <div class="row-line" style="border:none;padding:4px 0;"><span>Poin</span><b style="color:#C98A2C;">${c.points}</b></div></div>`).join("");
-  return `<div class="grid-cards">${cards}</div>`;
+    <div class="row-line" style="border:none;padding:4px 0;"><span>Poin</span><b style="color:#C98A2C;">${c.points}</b></div>
+    <button class="btn-mini ghost-danger" style="width:100%;margin-top:10px;" onclick="deleteCustomer('${c.id}','${c.name.replace(/'/g,"\\'")}')">Hapus Pelanggan</button>
+    </div>`).join("");
+  return cards ? `<div class="grid-cards">${cards}</div>` : `<div class="panel" style="text-align:center;color:#9A9484;">Belum ada pelanggan. Pelanggan akan tercatat otomatis saat dipilih pada transaksi POS.</div>`;
+}
+
+async function deleteCustomer(id, name){
+  if(!confirm(`Hapus pelanggan "${name}" secara permanen?`)) return;
+  setSyncing(true);
+  try{ await api("DELETE", `/api/customers/${id}`); await loadAllData(); toast("Pelanggan dihapus permanen."); }
+  catch(e){ setSyncing(false, true); toast(e.message, "error"); }
 }
 
 function pagePromo(){

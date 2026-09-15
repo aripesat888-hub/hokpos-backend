@@ -281,6 +281,29 @@ app.get("/api/inventory", async (req, res) => {
   res.json(await all("SELECT * FROM inventory"));
 });
 
+app.post("/api/inventory", async (req, res) => {
+  const { name, unit, stock, minStock } = req.body || {};
+  if (!name || !unit) return res.status(400).json({ error: "Nama item dan satuan wajib diisi." });
+  const id = "inv_" + Date.now();
+  await run("INSERT INTO inventory (id,name,unit,stock,min_stock) VALUES (?,?,?,?,?)", [
+    id, name.trim(), unit.trim(), Number(stock) || 0, Number(minStock) || 0,
+  ]);
+  await logAudit(req.user.name, `Menambahkan item inventaris baru "${name}"`);
+  res.status(201).json(await get("SELECT * FROM inventory WHERE id = ?", [id]));
+});
+
+app.put("/api/inventory/:id", async (req, res) => {
+  const inv = await get("SELECT * FROM inventory WHERE id = ?", [req.params.id]);
+  if (!inv) return res.status(404).json({ error: "Item inventaris tidak ditemukan." });
+  const { name, unit, minStock } = req.body || {};
+  if (!name || !unit) return res.status(400).json({ error: "Nama item dan satuan wajib diisi." });
+  await run("UPDATE inventory SET name=?, unit=?, min_stock=? WHERE id=?", [
+    name.trim(), unit.trim(), Number(minStock) || 0, req.params.id,
+  ]);
+  await logAudit(req.user.name, `Mengubah item inventaris "${inv.name}" menjadi "${name}"`);
+  res.json(await get("SELECT * FROM inventory WHERE id = ?", [req.params.id]));
+});
+
 app.patch("/api/inventory/:id", async (req, res) => {
   const inv = await get("SELECT * FROM inventory WHERE id = ?", [req.params.id]);
   if (!inv) return res.status(404).json({ error: "Item inventaris tidak ditemukan." });
@@ -290,6 +313,18 @@ app.patch("/api/inventory/:id", async (req, res) => {
   await run("UPDATE inventory SET stock = ? WHERE id = ?", [newStock, req.params.id]);
   await logAudit(req.user.name, `Mengubah stok "${inv.name}" sebesar ${delta > 0 ? "+" : ""}${delta}`);
   res.json(await get("SELECT * FROM inventory WHERE id = ?", [req.params.id]));
+});
+
+app.delete("/api/inventory/:id", async (req, res) => {
+  const inv = await get("SELECT * FROM inventory WHERE id = ?", [req.params.id]);
+  if (!inv) return res.status(404).json({ error: "Item inventaris tidak ditemukan." });
+  const linkedMenu = await get("SELECT id, name FROM menu_items WHERE inventory_id = ? LIMIT 1", [req.params.id]);
+  if (linkedMenu) {
+    return res.status(400).json({ error: `Tidak bisa dihapus, masih dipakai oleh menu "${linkedMenu.name}". Ubah menu itu dulu.` });
+  }
+  await run("DELETE FROM inventory WHERE id = ?", [req.params.id]);
+  await logAudit(req.user.name, `Menghapus item inventaris "${inv.name}" secara permanen`);
+  res.json({ ok: true });
 });
 
 /* ---------------------------------------------------------
@@ -308,6 +343,15 @@ app.post("/api/customers", async (req, res) => {
   ]);
   await logAudit(req.user.name, `Menambahkan pelanggan baru "${name}"`);
   res.status(201).json(await get("SELECT * FROM customers WHERE id = ?", [id]));
+});
+
+app.delete("/api/customers/:id", async (req, res) => {
+  const cust = await get("SELECT * FROM customers WHERE id = ?", [req.params.id]);
+  if (!cust) return res.status(404).json({ error: "Pelanggan tidak ditemukan." });
+  await run("UPDATE orders SET customer_id = NULL WHERE customer_id = ?", [req.params.id]);
+  await run("DELETE FROM customers WHERE id = ?", [req.params.id]);
+  await logAudit(req.user.name, `Menghapus pelanggan "${cust.name}" secara permanen`);
+  res.json({ ok: true });
 });
 
 /* ---------------------------------------------------------

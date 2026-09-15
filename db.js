@@ -164,9 +164,6 @@ async function seedIfEmpty() {
 
     await run("INSERT INTO promos (id,name,discount,active) VALUES (?,?,?,?)", ["p1", "Diskon Jam Makan Siang", 10, 1]);
     await run("INSERT INTO promos (id,name,discount,active) VALUES (?,?,?,?)", ["p2", "Promo Member Baru", 15, 0]);
-
-    await run("INSERT INTO customers (id,name,phone,total_orders,total_spent,points) VALUES (?,?,?,0,0,0)", ["c1", "Rina Wijaya", "0812-3456-7890"]);
-    await run("INSERT INTO customers (id,name,phone,total_orders,total_spent,points) VALUES (?,?,?,0,0,0)", ["c2", "Budi Santoso", "0813-1122-3344"]);
   }
 
   const settingsCountRow = await get("SELECT COUNT(*) AS c FROM settings");
