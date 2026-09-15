@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pesan Online</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+  * { box-sizing:border-box; margin:0; padding:0; font-family:'IBM Plex Sans',Arial,sans-serif; }
+  .disp { font-family:'Space Grotesk',Arial,sans-serif; }
+  body { background:#F5F1E8; color:#201D1B; padding-bottom:90px; }
+  ::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:#C9BFA8;border-radius:4px;}
+
+  .hero {
+    background:linear-gradient(135deg,#3A1410 0%,#B3261E 55%,#C9601F 100%);
+    color:#fff; padding:32px 24px 40px; position:relative; overflow:hidden;
+  }
+  .hero::after {
+    content:""; position:absolute; inset:0; opacity:.12;
+    background-image: repeating-linear-gradient(45deg,#fff 0 2px,transparent 2px 26px);
+  }
+  .hero-inner { position:relative; z-index:1; max-width:760px; margin:0 auto; }
+  .store-row { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+  .store-logo { width:44px; height:44px; border-radius:12px; background:rgba(255,255,255,.15); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .store-name { font-size:17px; font-weight:700; }
+  .store-tagline { font-size:12px; opacity:.85; }
+  .hero-title { font-size:26px; font-weight:700; margin-bottom:6px; }
+  .hero-desc { font-size:13.5px; opacity:.9; margin-bottom:16px; max-width:480px; }
+  .hero-tags { display:flex; gap:8px; flex-wrap:wrap; }
+  .hero-tag { background:rgba(255,255,255,.15); backdrop-filter:blur(4px); padding:6px 12px; border-radius:999px; font-size:12px; display:flex; align-items:center; gap:6px; }
+
+  .content { max-width:760px; margin:0 auto; padding:20px 20px 0; }
+  .search-box { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #E2D8C0; border-radius:12px; padding:12px 16px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,.04); }
+  .search-box input { border:none; outline:none; font-size:14px; width:100%; background:transparent; }
+  .cat-row { display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:18px; }
+  .cat-pill { flex-shrink:0; padding:8px 16px; border-radius:999px; border:1px solid #E2D8C0; background:#fff; font-size:13px; cursor:pointer; white-space:nowrap; }
+  .cat-pill.active { background:#201D1B; color:#fff; border-color:#201D1B; }
+
+  .menu-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
+  .menu-card { background:#fff; border:1px solid #E2D8C0; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.04); display:flex; flex-direction:column; }
+  .menu-img { width:100%; height:140px; object-fit:cover; background:#eee; }
+  .menu-img.placeholder { display:flex; align-items:center; justify-content:center; font-size:32px; color:#C9BFA8; }
+  .menu-body { padding:14px; display:flex; flex-direction:column; gap:6px; flex:1; }
+  .menu-cat-tag { font-size:10.5px; color:#B3261E; font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+  .menu-name { font-size:14.5px; font-weight:600; }
+  .menu-price { font-size:15px; font-weight:700; color:#201D1B; margin-top:auto; }
+  .menu-add-btn { margin-top:8px; background:#201D1B; color:#fff; border:none; border-radius:10px; padding:10px 0; font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .menu-add-btn:disabled { background:#D8CDB4; cursor:not-allowed; }
+  .qty-row { display:flex; align-items:center; justify-content:space-between; margin-top:8px; background:#F5F1E8; border-radius:10px; padding:4px; }
+  .qty-btn { width:30px; height:30px; border:none; background:#fff; border-radius:8px; font-size:15px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .empty-note { text-align:center; color:#9A9484; font-size:13.5px; padding:40px 0; grid-column:1/-1; }
+
+  /* Floating cart bar */
+  .cart-bar { position:fixed; bottom:16px; left:16px; right:16px; max-width:728px; margin:0 auto; background:#201D1B; color:#fff; border-radius:16px; padding:14px 18px; display:none; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.25); z-index:50; }
+  .cart-bar.show { display:flex; }
+  .cart-bar-left { display:flex; align-items:center; gap:10px; }
+  .cart-count-badge { background:#B3261E; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
+  .cart-bar-total { font-weight:700; }
+
+  /* Modal / sheet */
+  .sheet-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:100; display:none; align-items:flex-end; justify-content:center; }
+  .sheet-backdrop.show { display:flex; }
+  .sheet { background:#F5F1E8; width:100%; max-width:760px; max-height:88vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:22px 20px 30px; }
+  .sheet-title { font-size:18px; font-weight:700; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .sheet-close { background:none; border:none; font-size:20px; cursor:pointer; color:#77705F; }
+
+  .cart-line { display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid #E2D8C0; border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+  .cart-line-name { font-size:13.5px; font-weight:600; }
+  .cart-line-price { font-size:12px; color:#8A8377; }
+
+  .field-label { font-size:12.5px; font-weight:600; margin:14px 0 6px; display:block; }
+  .field-box { border:1px solid #E2D8C0; border-radius:10px; padding:11px 14px; background:#fff; }
+  .field-box input, .field-box textarea { border:none; outline:none; font-size:13.5px; width:100%; background:transparent; font-family:inherit; }
+
+  .pay-options { display:flex; flex-direction:column; gap:8px; }
+  .pay-option { border:1px solid #E2D8C0; border-radius:12px; padding:12px 14px; background:#fff; cursor:pointer; }
+  .pay-option.active { border-color:#B3261E; background:#FBEEEC; }
+  .pay-option-title { font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
+
+  .pay-detail-box { background:#fff; border:1px dashed #C9BFA8; border-radius:10px; padding:12px 14px; margin-top:10px; font-size:12.5px; line-height:1.7; }
+  .pay-detail-box b { font-family:'Space Grotesk',sans-serif; }
+  .qris-img { width:100%; max-width:220px; border-radius:10px; margin-top:8px; display:block; }
+
+  .sum-row { display:flex; justify-content:space-between; font-size:14px; margin-top:14px; }
+  .sum-row.total { font-weight:700; font-size:17px; padding-top:10px; border-top:1px solid #E2D8C0; margin-top:10px; }
+  .btn-submit { width:100%; background:#B3261E; color:#fff; border:none; border-radius:999px; padding:14px 0; font-weight:700; font-size:14.5px; cursor:pointer; margin-top:18px; }
+  .btn-submit:disabled { background:#D8CDB4; cursor:not-allowed; }
+  .err-box { color:#B3261E; font-size:12.5px; margin-top:10px; text-align:center; }
+
+  /* Confirmation screen */
+  .confirm-wrap { text-align:center; padding:20px 10px; }
+  .confirm-icon { width:64px; height:64px; border-radius:50%; background:#E4EEE5; color:#4F6F52; display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 16px; }
+  .confirm-id { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:#B3261E; margin-bottom:6px; }
+  .confirm-title { font-size:18px; font-weight:700; margin-bottom:6px; }
+  .confirm-note { font-size:13px; color:#77705F; margin-bottom:18px; }
+  .btn-secondary { background:#fff; border:1px solid #E2D8C0; border-radius:999px; padding:12px 24px; font-weight:600; font-size:13.5px; cursor:pointer; }
+
+  @media (max-width:480px){ .menu-grid{grid-template-columns:repeat(2,1fr);} }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="store-row">
+      <div class="store-logo">🍱</div>
+      <div>
+        <div class="store-name disp" id="store-name">Memuat...</div>
+        <div class="store-tagline" id="store-tagline"></div>
+      </div>
+    </div>
+    <div class="hero-title disp">Menu Online</div>
+    <div class="hero-desc">Pilih menu favorit Anda, lalu pesan langsung — pesanan masuk otomatis ke dapur kami.</div>
+    <div class="hero-tags">
+      <div class="hero-tag" id="tag-hours">⏰ --</div>
+      <div class="hero-tag" id="tag-location" style="display:none;">📍 --</div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="search-box">
+    <span>🔍</span>
+    <input id="search-input" placeholder="Cari menu...">
+  </div>
+  <div class="cat-row" id="cat-row"></div>
+  <div class="menu-grid" id="menu-grid">
+    <div class="empty-note">Memuat menu...</div>
+  </div>
+</div>
+
+<div class="cart-bar" id="cart-bar" onclick="openCartSheet()">
+  <div class="cart-bar-left">
+    <div class="cart-count-badge" id="cart-count">0</div>
+    <div>Lihat Keranjang</div>
+  </div>
+  <div class="cart-bar-total" id="cart-bar-total">Rp0</div>
+</div>
+
+<div class="sheet-backdrop" id="sheet-backdrop" onclick="if(event.target===this) closeSheet()">
+  <div class="sheet" id="sheet-content"></div>
+</div>
+
+<script>
+const rupiah = n => "Rp" + Math.round(n).toLocaleString("id-ID");
+
+let menu = [];
+let settings = {};
+let cart = []; // {menuId, qty}
+let activeCategory = "Semua";
+let searchQuery = "";
+let paymentMethod = "COD";
+let view = "cart"; // 'cart' | 'confirmation'
+let lastOrder = null;
+
+async function api(method, path, body){
+  const res = await fetch(path, {
+    method, headers: body ? {"Content-Type":"application/json"} : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch(e) {}
+  if(!res.ok) throw new Error((data && data.error) || "Terjadi kesalahan.");
+  return data;
+}
+
+async function loadAll(){
+  try {
+    const [menuRes, settingsRes] = await Promise.all([
+      api("GET","/api/public/menu"),
+      api("GET","/api/public/settings"),
+    ]);
+    menu = menuRes;
+    settings = settingsRes;
+    renderHero();
+    renderCategories();
+    renderMenu();
+  } catch(e) {
+    document.getElementById("menu-grid").innerHTML = `<div class="empty-note">Gagal memuat menu. Coba muat ulang halaman.</div>`;
+  }
+}
+
+function renderHero(){
+  document.getElementById("store-name").textContent = settings.store_name || "Restoran";
+  document.getElementById("store-tagline").textContent = settings.store_tagline || "";
+  document.getElementById("tag-hours").textContent = "⏰ " + (settings.store_hours || "-");
+  if(settings.store_location){
+    document.getElementById("tag-location").style.display = "flex";
+    document.getElementById("tag-location").textContent = "📍 " + settings.store_location;
+  }
+}
+
+function renderCategories(){
+  const cats = ["Semua", ...new Set(menu.map(m => m.category))];
+  document.getElementById("cat-row").innerHTML = cats.map(c =>
+    `<div class="cat-pill ${activeCategory===c?"active":""}" onclick="setCategory('${c.replace(/'/g,"\\'")}')">${c}</div>`
+  ).join("");
+}
+function setCategory(c){ activeCategory = c; renderCategories(); renderMenu(); }
+
+function renderMenu(){
+  const q = searchQuery.toLowerCase();
+  const filtered = menu.filter(m =>
+    (activeCategory === "Semua" || m.category === activeCategory) &&
+    m.name.toLowerCase().includes(q)
+  );
+  const grid = document.getElementById("menu-grid");
+  if(filtered.length === 0){
+    grid.innerHTML = `<div class="empty-note">Menu tidak ditemukan.</div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(m => {
+    const inCart = cart.find(i => i.menuId === m.id);
+    const img = m.imageUrl
+      ? `<img class="menu-img" src="${m.imageUrl}" alt="${m.name}" onerror="this.outerHTML='<div class=\\'menu-img placeholder\\'>🍽️</div>'">`
+      : `<div class="menu-img placeholder">🍽️</div>`;
+    return `
+      <div class="menu-card">
+        ${img}
+        <div class="menu-body">
+          <div class="menu-cat-tag">${m.category}</div>
+          <div class="menu-name">${m.name}</div>
+          <div class="menu-price disp">${rupiah(m.price)}</div>
+          ${!m.available ? `<button class="menu-add-btn" disabled>Habis</button>` :
+            inCart ? `
+              <div class="qty-row">
+                <button class="qty-btn" onclick="changeQty('${m.id}',-1)">−</button>
+                <span style="font-weight:600;font-size:13px;">${inCart.qty}</span>
+                <button class="qty-btn" onclick="changeQty('${m.id}',1)">+</button>
+              </div>` :
+            `<button class="menu-add-btn" onclick="addToCart('${m.id}')">+ Tambah</button>`
+          }
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function addToCart(menuId){
+  cart.push({menuId, qty:1});
+  renderMenu(); renderCartBar();
+}
+function changeQty(menuId, delta){
+  const item = cart.find(i => i.menuId === menuId);
+  if(!item) return;
+  item.qty += delta;
+  if(item.qty <= 0) cart = cart.filter(i => i.menuId !== menuId);
+  renderMenu(); renderCartBar();
+  if(document.getElementById("sheet-backdrop").classList.contains("show") && view === "cart") renderSheet();
+}
+function cartTotal(){
+  return cart.reduce((s,i) => { const m = menu.find(x=>x.id===i.menuId); return s + (m?m.price:0) * i.qty; }, 0);
+}
+function renderCartBar(){
+  const bar = document.getElementById("cart-bar");
+  const count = cart.reduce((s,i)=>s+i.qty,0);
+  if(count === 0){ bar.classList.remove("show"); return; }
+  bar.classList.add("show");
+  document.getElementById("cart-count").textContent = count;
+  document.getElementById("cart-bar-total").textContent = rupiah(cartTotal());
+}
+
+function openCartSheet(){
+  view = "cart";
+  document.getElementById("sheet-backdrop").classList.add("show");
+  renderSheet();
+}
+function closeSheet(){
+  document.getElementById("sheet-backdrop").classList.remove("show");
+}
+
+function setPaymentMethod(m){ paymentMethod = m; renderSheet(); }
+
+function renderSheet(){
+  const el = document.getElementById("sheet-content");
+  if(view === "confirmation" && lastOrder){
+    const methodNote = {
+      COD: "Silakan bayar saat pesanan tiba / Anda ambil di tempat.",
+      Transfer: "Silakan transfer sesuai info di atas, lalu kirim bukti transfer ke WhatsApp kami agar pesanan segera diproses.",
+      QRIS: "Silakan scan QRIS di atas untuk membayar, lalu kirim bukti pembayaran ke WhatsApp kami agar pesanan segera diproses.",
+    }[lastOrder.payment_method] || "";
+    const waLink = settings.store_whatsapp
+      ? `https://wa.me/${settings.store_whatsapp.replace(/[^0-9]/g,'')}?text=${encodeURIComponent('Halo, saya baru saja memesan #' + lastOrder.id.slice(-5) + ' atas nama ' + lastOrder.customer_name)}`
+      : null;
+    el.innerHTML = `
+      <div class="confirm-wrap">
+        <div class="confirm-icon">✓</div>
+        <div class="confirm-title disp">Pesanan Terkirim!</div>
+        <div class="confirm-id">#${lastOrder.id.slice(-5)}</div>
+        <div class="confirm-note">${methodNote}</div>
+        ${waLink ? `<a href="${waLink}" target="_blank" style="display:block;text-decoration:none;">
+          <button class="btn-submit" style="margin-bottom:10px;">💬 Konfirmasi via WhatsApp</button>
+        </a>` : ""}
+        <button class="btn-secondary" onclick="resetAfterOrder()">Pesan Lagi</button>
+      </div>`;
+    return;
+  }
+
+  if(cart.length === 0){
+    el.innerHTML = `
+      <div class="sheet-title disp">Keranjang <button class="sheet-close" onclick="closeSheet()">×</button></div>
+      <div class="empty-note">Keranjang masih kosong.</div>`;
+    return;
+  }
+
+  const lines = cart.map(i => {
+    const m = menu.find(x=>x.id===i.menuId);
+    return `<div class="cart-line">
+      <div><div class="cart-line-name">${m.name}</div><div class="cart-line-price">${i.qty} x ${rupiah(m.price)}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="qty-btn" onclick="changeQty('${i.menuId}',-1)">−</button>
+        <span style="font-weight:600;">${i.qty}</span>
+        <button class="qty-btn" onclick="changeQty('${i.menuId}',1)">+</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  const total = cartTotal();
+
+  let payDetail = "";
+  if(paymentMethod === "Transfer"){
+    payDetail = `<div class="pay-detail-box">
+      Transfer ke:<br>
+      <b>${settings.bank_name || "-"}</b> a.n. <b>${settings.bank_account_name || "-"}</b><br>
+      No. Rekening: <b>${settings.bank_account_number || "-"}</b>
+    </div>`;
+  } else if(paymentMethod === "QRIS"){
+    payDetail = settings.qris_image_url
+      ? `<div class="pay-detail-box">Scan QRIS berikut untuk membayar:<br><img class="qris-img" src="${settings.qris_image_url}"></div>`
+      : `<div class="pay-detail-box">QRIS belum tersedia, silakan pilih metode lain atau hubungi toko.</div>`;
+  } else {
+    payDetail = `<div class="pay-detail-box">Anda akan membayar tunai/QRIS langsung saat pesanan tiba atau saat mengambil pesanan di tempat.</div>`;
+  }
+
+  el.innerHTML = `
+    <div class="sheet-title disp">Keranjang Anda <button class="sheet-close" onclick="closeSheet()">×</button></div>
+    ${lines}
+
+    <label class="field-label">Nama Anda</label>
+    <div class="field-box"><input id="cust-name" placeholder="Nama lengkap"></div>
+
+    <label class="field-label">Nomor WhatsApp</label>
+    <div class="field-box"><input id="cust-phone" placeholder="08xxxxxxxxxx" type="tel"></div>
+
+    <label class="field-label">Alamat Pengiriman / Catatan (opsional)</label>
+    <div class="field-box"><textarea id="cust-notes" rows="2" placeholder="Contoh: Jl. Medan No.10, tanpa pedas, dll"></textarea></div>
+
+    <label class="field-label">Metode Pembayaran</label>
+    <div class="pay-options">
+      <div class="pay-option ${paymentMethod==='COD'?'active':''}" onclick="setPaymentMethod('COD')">
+        <div class="pay-option-title">💵 Bayar di Tempat (COD)</div>
+      </div>
+      <div class="pay-option ${paymentMethod==='Transfer'?'active':''}" onclick="setPaymentMethod('Transfer')">
+        <div class="pay-option-title">🏦 Transfer Bank</div>
+      </div>
+      <div class="pay-option ${paymentMethod==='QRIS'?'active':''}" onclick="setPaymentMethod('QRIS')">
+        <div class="pay-option-title">📱 QRIS</div>
+      </div>
+    </div>
+    ${payDetail}
+
+    <div class="sum-row total"><span>Total</span><span>${rupiah(total)}</span></div>
+    <div class="err-box" id="order-error" style="display:none;"></div>
+    <button class="btn-submit" id="submit-btn" onclick="submitOrder()">Kirim Pesanan</button>
+  `;
+}
+
+async function submitOrder(){
+  const name = document.getElementById("cust-name").value.trim();
+  const phone = document.getElementById("cust-phone").value.trim();
+  const notes = document.getElementById("cust-notes").value.trim();
+  const errBox = document.getElementById("order-error");
+  const btn = document.getElementById("submit-btn");
+  errBox.style.display = "none";
+
+  if(!name || !phone){
+    errBox.style.display = "block";
+    errBox.textContent = "Nama dan nomor WhatsApp wajib diisi.";
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = "Mengirim...";
+  try {
+    const order = await api("POST","/api/public/orders", {
+      items: cart, customerName: name, customerPhone: phone,
+      paymentMethod, notes,
+    });
+    lastOrder = order;
+    cart = [];
+    view = "confirmation";
+    renderCartBar();
+    renderMenu();
+    renderSheet();
+  } catch(e) {
+    errBox.style.display = "block";
+    errBox.textContent = e.message;
+    btn.disabled = false; btn.textContent = "Kirim Pesanan";
+  }
+}
+
+function resetAfterOrder(){
+  view = "cart";
+  lastOrder = null;
+  closeSheet();
+}
+
+document.getElementById("search-input").addEventListener("input", (e) => {
+  searchQuery = e.target.value;
+  renderMenu();
+});
+
+loadAll();
+</script>
+</body>
+</html>
