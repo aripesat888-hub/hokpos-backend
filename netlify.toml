@@ -1,0 +1,17 @@
+[build]
+  functions = "netlify/functions"
+  publish = "public"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Requests to /api/* are routed to our serverless function. The extra "/api"
+# segment in the target path is intentional: Netlify strips the function's
+# own base path ("/.netlify/functions/api") before handing the request to
+# Express, so this puts the "/api" prefix back exactly as our routes expect
+# it (e.g. a request to /api/auth/login reaches Express as /api/auth/login,
+# not /auth/login).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200

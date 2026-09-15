@@ -67,6 +67,11 @@
   .pill { font-size:11.5px; font-weight:600; padding:3px 10px; border-radius:999px; white-space:nowrap; }
   .pill-proses  { background:#E4EEE5; color:#4F6F52; }
   .pill-batal   { background:#F7E4E2; color:#B3261E; }
+  .pill-pending { background:#FCEFD9; color:#C98A2C; }
+  .pill-info    { background:#E4EAF7; color:#3B4F9E; }
+  .source-badge { font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:999px; }
+  .source-online { background:#FBEEEC; color:#B3261E; }
+  .source-pos { background:#EEEEEE; color:#555; }
 
   .btn-mini { border:1px solid #E2D8C0; background:#fff; color:#201D1B; border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; font-weight:600; }
   .btn-mini.primary { background:#B3261E; color:#fff; border-color:#B3261E; }
@@ -211,7 +216,7 @@ const CATEGORY_EMOJI = { "Bento":"🍱", "Tambahan":"🍚", "Minuman":"🥤", "S
 
 let state = {
   user:null, page:"dashboard", syncing:false, syncError:false,
-  menu:[], inventory:[], customers:[], promos:[], orders:[], auditLog:[],
+  menu:[], inventory:[], customers:[], promos:[], orders:[], auditLog:[], settings:{},
   cart:[], cartCustomer:"", cartPromo:"", cartTable:"", cartPayment:"Tunai", cartCash:"",
   menuQuery:"", reportFilter:"all", editingMenuId:null, showMenuForm:false,
 };
@@ -220,6 +225,7 @@ const NAV_DEFS = [
   { id:"dashboard", label:"Ringkasan" }, { id:"pos", label:"POS" }, { id:"orders", label:"Pesanan" },
   { id:"menu", label:"Menu" }, { id:"inventory", label:"Inventaris" }, { id:"reports", label:"Laporan" },
   { id:"customers", label:"Pelanggan" }, { id:"promo", label:"Promo" }, { id:"audit", label:"Log Aktivitas" },
+  { id:"settings", label:"Pengaturan" },
 ];
 const TITLES = Object.fromEntries(NAV_DEFS.map(n=>[n.id,n.label]));
 TITLES.pos = "Point of Sale";
@@ -295,12 +301,12 @@ async function handleLogout(){
 async function loadAllData(){
   setSyncing(true);
   try{
-    const [menu, inventory, customers, promos, orders, auditLog] = await Promise.all([
+    const [menu, inventory, customers, promos, orders, auditLog, settings] = await Promise.all([
       api("GET","/api/menu"), api("GET","/api/inventory"), api("GET","/api/customers"),
-      api("GET","/api/promos"), api("GET","/api/orders"), api("GET","/api/audit"),
+      api("GET","/api/promos"), api("GET","/api/orders"), api("GET","/api/audit"), api("GET","/api/settings"),
     ]);
     state.menu = menu; state.inventory = inventory; state.customers = customers;
-    state.promos = promos; state.orders = orders; state.auditLog = auditLog;
+    state.promos = promos; state.orders = orders; state.auditLog = auditLog; state.settings = settings;
     setSyncing(false);
   }catch(e){
     setSyncing(false, true);
@@ -383,15 +389,17 @@ async function saveMenuForm(){
   const price = parseFloat(document.getElementById("mf-price").value);
   const inventoryId = document.getElementById("mf-inventory").value;
   const uses = parseFloat(document.getElementById("mf-uses").value) || 1;
+  const imageUrl = document.getElementById("mf-image").value.trim();
   if(!name || isNaN(price) || price < 0){ toast("Nama menu dan harga (angka positif) wajib diisi.", "error"); return; }
 
+  const isEditing = !!state.editingMenuId;
   setSyncing(true);
   try{
-    if(state.editingMenuId) await api("PUT", `/api/menu/${state.editingMenuId}`, {name,category,price,inventoryId,uses});
-    else await api("POST", "/api/menu", {name,category,price,inventoryId,uses});
+    if(isEditing) await api("PUT", `/api/menu/${state.editingMenuId}`, {name,category,price,inventoryId,uses,imageUrl});
+    else await api("POST", "/api/menu", {name,category,price,inventoryId,uses,imageUrl});
     state.showMenuForm = false; state.editingMenuId = null;
     await loadAllData();
-    toast(state.editingMenuId ? "Menu diperbarui permanen." : "Menu baru tersimpan permanen.");
+    toast(isEditing ? "Menu diperbarui permanen dan langsung tersinkron ke link pemesanan online." : "Menu baru tersimpan permanen dan langsung tampil di link pemesanan online.");
   }catch(e){ setSyncing(false, true); toast(e.message, "error"); }
 }
 async function deleteMenuItem(id){
@@ -527,6 +535,7 @@ function renderPage(){
     case "customers": el.innerHTML = pageCustomers(); break;
     case "promo": el.innerHTML = pagePromo(); break;
     case "audit": el.innerHTML = pageAudit(); break;
+    case "settings": el.innerHTML = pageSettings(); wireSettingsInputs(); break;
   }
   if(state.showMenuForm) renderMenuFormModal();
   else if(document.getElementById("modal-root").querySelector(".menu-form-modal")) closeModal();
@@ -537,12 +546,16 @@ function wirePOSInputs(){
   const c = document.getElementById("cash-input"); if(c) c.oninput = e=>setCartCash(e.target.value);
   renderCashFeedback();
 }
-function pill(status){ return `<span class="pill ${status==='Dibatalkan'?'pill-batal':'pill-proses'}">${status}</span>`; }
+function pill(status){
+  const map = { "Dibatalkan":"pill-batal", "Menunggu Konfirmasi":"pill-pending", "Diproses":"pill-info", "Selesai":"pill-proses" };
+  return `<span class="pill ${map[status]||"pill-proses"}">${status}</span>`;
+}
 
 function pageDashboard(){
   const active = state.orders.filter(o=>o.status!=="Dibatalkan");
   const totalRevenue = active.reduce((s,o)=>s+o.total,0);
   const lowStock = state.inventory.filter(i=>i.stock<=i.min_stock);
+  const pendingOnline = state.orders.filter(o=>o.source==="online" && o.status==="Menunggu Konfirmasi");
   const counts = {};
   active.forEach(o=>{ const items = typeof o.items==="string"?JSON.parse(o.items):o.items; items.forEach(it=>counts[it.menuId]=(counts[it.menuId]||0)+it.qty); });
   const topId = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0];
@@ -550,7 +563,13 @@ function pageDashboard(){
   const recent = active.length ? active.slice(0,5).map(o=>`
     <div class="row-line"><div>#${o.id.slice(-5)} · ${(typeof o.items==="string"?JSON.parse(o.items):o.items).reduce((s,i)=>s+i.qty,0)} item</div>${pill(o.status)}<div style="font-weight:600;">${rupiah(o.total)}</div></div>`).join("")
     : `<div class="empty-note">Belum ada pesanan. Buat pesanan pertama di halaman POS.</div>`;
+  const alertBanner = pendingOnline.length ? `
+    <div class="panel" style="border-color:#C98A2C;background:#FFFBF2;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>🌐 <b>${pendingOnline.length} pesanan online baru</b> sedang menunggu konfirmasi Anda.</div>
+      <button class="btn-mini primary" onclick="goPage('orders')">Lihat Pesanan</button>
+    </div>` : "";
   return `
+    ${alertBanner}
     <div class="stat-row">
       <div class="stat-card"><div class="stat-label">Total Pendapatan</div><div class="stat-value disp">${rupiah(totalRevenue)}</div></div>
       <div class="stat-card"><div class="stat-label">Total Pesanan</div><div class="stat-value disp">${active.length}</div></div>
@@ -615,21 +634,64 @@ function pagePOS(){
 
 function pageOrders(){
   if(state.orders.length===0) return `<div class="panel" style="text-align:center;color:#9A9484;">Belum ada pesanan.</div>`;
-  const rows = state.orders.map(o=>`
-    <tr><td>#${o.id.slice(-5)}</td><td>${(typeof o.items==="string"?JSON.parse(o.items):o.items).reduce((s,i)=>s+i.qty,0)} item</td>
-    <td style="font-weight:600;">${rupiah(o.total)}</td><td>${o.payment_method}</td><td>${pill(o.status)}</td>
-    <td style="color:#77705F;">${fmtDate(o.created_at)}</td>
-    <td style="display:flex;gap:6px;"><button class="btn-mini" onclick="printReceipt('${o.id}')">Cetak</button>
-    ${o.status!=="Dibatalkan" ? `<button class="btn-mini ghost-danger" onclick="cancelOrder('${o.id}')">Batalkan</button>` : ""}</td></tr>`).join("");
-  return `<div class="panel" style="padding:0;overflow:hidden;"><table><thead><tr><th>ID</th><th>Item</th><th>Total</th><th>Bayar</th><th>Status</th><th>Waktu</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const rows = state.orders.map(o=>{
+    const itemCount = (typeof o.items==="string"?JSON.parse(o.items):o.items).reduce((s,i)=>s+i.qty,0);
+    const isOnline = o.source === "online";
+    const sourceBadge = isOnline
+      ? `<span class="source-badge source-online">🌐 Online</span>`
+      : `<span class="source-badge source-pos">🏪 POS</span>`;
+    const whoInfo = isOnline
+      ? `<div style="font-size:11px;color:#77705F;margin-top:2px;">${o.customer_name||""} · ${o.customer_phone||""}</div>`
+      : "";
+
+    let actionButtons = `<button class="btn-mini" onclick="printReceipt('${o.id}')">Cetak</button>`;
+    if(o.status === "Menunggu Konfirmasi"){
+      actionButtons += ` <button class="btn-mini primary" onclick="advanceOrderStatus('${o.id}','Diproses')">Terima Pesanan</button>`;
+    } else if(o.status === "Diproses" && isOnline){
+      actionButtons += ` <button class="btn-mini primary" onclick="advanceOrderStatus('${o.id}','Selesai')">Tandai Selesai</button>`;
+    }
+    if(isOnline && o.payment_status !== "Lunas" && o.status !== "Dibatalkan"){
+      actionButtons += ` <button class="btn-mini" onclick="markPaymentReceived('${o.id}')" title="Tandai pembayaran sudah diterima">💰 Tandai Lunas</button>`;
+    }
+    if(o.status !== "Dibatalkan"){
+      actionButtons += ` <button class="btn-mini ghost-danger" onclick="cancelOrder('${o.id}')">Batalkan</button>`;
+    }
+
+    return `
+    <tr>
+      <td>#${o.id.slice(-5)}<br>${sourceBadge}${whoInfo}</td>
+      <td>${itemCount} item</td>
+      <td style="font-weight:600;">${rupiah(o.total)}</td>
+      <td>${o.payment_method}<br><span style="font-size:10.5px;color:${o.payment_status==='Lunas'?'#4F6F52':'#C98A2C'};">${o.payment_status||''}</span></td>
+      <td>${pill(o.status)}</td>
+      <td style="color:#77705F;">${fmtDate(o.created_at)}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">${actionButtons}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="panel" style="padding:0;overflow:hidden;"><table><thead><tr><th>ID / Sumber</th><th>Item</th><th>Total</th><th>Bayar</th><th>Status</th><th>Waktu</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function advanceOrderStatus(orderId, newStatus){
+  setSyncing(true);
+  try{ await api("PATCH", `/api/orders/${orderId}/status`, {status:newStatus}); await loadAllData(); toast(`Status pesanan diubah menjadi "${newStatus}".`); }
+  catch(e){ setSyncing(false, true); toast(e.message, "error"); }
+}
+async function markPaymentReceived(orderId){
+  const order = state.orders.find(o=>o.id===orderId);
+  setSyncing(true);
+  try{ await api("PATCH", `/api/orders/${orderId}/status`, {status:order.status, paymentStatus:"Lunas"}); await loadAllData(); toast("Pembayaran ditandai lunas."); }
+  catch(e){ setSyncing(false, true); toast(e.message, "error"); }
 }
 
 function pageMenu(){
   const cards = state.menu.map(m=>{
     const inv = state.inventory.find(i=>i.id===m.inventory_id);
     const low = inv && inv.stock<=inv.min_stock;
+    const thumb = m.image_url
+      ? `<img src="${m.image_url}" alt="${m.name}" style="width:100%;height:90px;object-fit:cover;border-radius:10px;margin-bottom:8px;" onerror="this.style.display='none'">`
+      : `<div style="width:100%;height:90px;border-radius:10px;margin-bottom:8px;background:#F5F1E8;display:flex;align-items:center;justify-content:center;font-size:24px;">${CATEGORY_EMOJI[m.category]||"🍽️"}</div>`;
     return `<div class="info-card">
-      <div class="menu-emoji">${CATEGORY_EMOJI[m.category]||"🍽️"}</div>
+      ${thumb}
       <div class="menu-cat">${m.category}</div>
       <div style="font-weight:600;font-size:14.5px;margin:6px 0;">${m.name}</div>
       <div class="disp" style="color:#B3261E;font-weight:700;font-size:16px;">${rupiah(m.price)}</div>
@@ -639,7 +701,10 @@ function pageMenu(){
         <button class="btn-mini ghost-danger" onclick="deleteMenuItem('${m.id}')">Hapus</button>
       </div></div>`;
   }).join("");
-  return `<div style="margin-bottom:16px;"><button class="btn-mini primary" onclick="openMenuForm(null)">+ Tambah Menu</button></div><div class="grid-cards">${cards}</div>`;
+  return `<div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <button class="btn-mini primary" onclick="openMenuForm(null)">+ Tambah Menu</button>
+    <div style="font-size:12px;color:#77705F;">Perubahan di sini langsung tersinkron ke link pemesanan online (lihat halaman Pengaturan)</div>
+  </div><div class="grid-cards">${cards}</div>`;
 }
 function renderMenuFormModal(){
   const editing = state.editingMenuId ? state.menu.find(m=>m.id===state.editingMenuId) : null;
@@ -651,6 +716,7 @@ function renderMenuFormModal(){
         <div class="form-field"><label>Nama Menu</label><input class="textbox" style="margin-top:0;" id="mf-name" value="${editing?editing.name:""}"></div>
         <div class="form-field"><label>Kategori</label><input class="textbox" style="margin-top:0;" id="mf-category" value="${editing?editing.category:""}" placeholder="Bento / Minuman / Snack"></div>
         <div class="form-field"><label>Harga (Rp)</label><input class="textbox" style="margin-top:0;" id="mf-price" type="number" value="${editing?editing.price:""}"></div>
+        <div class="form-field"><label>URL Foto Menu</label><input class="textbox" style="margin-top:0;" id="mf-image" value="${editing&&editing.image_url?editing.image_url:""}" placeholder="https://... (tempel link gambar)"></div>
         <div class="form-field"><label>Terhubung ke Stok Inventaris</label><select class="selectbox" style="margin-top:0;" id="mf-inventory">${invOptions}</select></div>
         <div class="form-field"><label>Pemakaian Stok per Porsi</label><input class="textbox" style="margin-top:0;" id="mf-uses" type="number" value="${editing?editing.uses:1}"></div>
         <button class="btn-checkout" onclick="saveMenuForm()">Simpan Menu Permanen</button>
@@ -720,8 +786,83 @@ function pageAudit(){
   return `<div class="panel" style="padding:0;overflow:hidden;"><table><thead><tr><th>Waktu</th><th>Pengguna</th><th>Aktivitas</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+function pageSettings(){
+  const s = state.settings || {};
+  const orderLink = window.location.origin + "/order.html";
+  return `
+    <div class="panel" style="max-width:640px;margin-bottom:20px;">
+      <div class="panel-title disp">🔗 Link Pemesanan Online</div>
+      <div style="font-size:12.5px;color:#77705F;margin-bottom:10px;">
+        Bagikan link ini ke pelanggan (lewat WhatsApp, Instagram bio, dll). Menu, harga, foto, dan stok
+        di sini otomatis tersinkron ke halaman itu — dan setiap pesanan yang masuk lewat link ini akan
+        langsung muncul di halaman Pesanan Anda.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input class="textbox" style="margin-top:0;flex:1;min-width:220px;" id="order-link-box" readonly value="${orderLink}">
+        <button class="btn-mini primary" onclick="copyOrderLink()">Salin Link</button>
+        <a href="${orderLink}" target="_blank"><button class="btn-mini" type="button">Buka</button></a>
+      </div>
+    </div>
+
+    <div class="panel" style="max-width:640px;margin-bottom:20px;">
+      <div class="panel-title disp">🏪 Info Toko</div>
+      <div class="form-field"><label>Nama Toko</label><input class="textbox" style="margin-top:0;" id="st-store_name" value="${s.store_name||''}"></div>
+      <div class="form-field"><label>Tagline</label><input class="textbox" style="margin-top:0;" id="st-store_tagline" value="${s.store_tagline||''}"></div>
+      <div class="form-field"><label>Jam Operasional</label><input class="textbox" style="margin-top:0;" id="st-store_hours" value="${s.store_hours||''}" placeholder="10:00 - 22:00 WIB"></div>
+      <div class="form-field"><label>Lokasi</label><input class="textbox" style="margin-top:0;" id="st-store_location" value="${s.store_location||''}" placeholder="Medan, Sumatera Utara"></div>
+      <div class="form-field"><label>Nomor WhatsApp Toko (untuk konfirmasi pelanggan)</label><input class="textbox" style="margin-top:0;" id="st-store_whatsapp" value="${s.store_whatsapp||''}" placeholder="6281234567890 (tanpa +/spasi)"></div>
+    </div>
+
+    <div class="panel" style="max-width:640px;margin-bottom:20px;">
+      <div class="panel-title disp">💳 Pengaturan Pembayaran Online</div>
+      <div style="font-size:12px;color:#77705F;margin-bottom:12px;">
+        Pelanggan yang pesan online akan melihat info ini saat memilih Transfer Bank atau QRIS. Pesanan
+        online berstatus <b>"Menunggu Konfirmasi"</b> sampai Anda menekan tombol Terima di halaman Pesanan,
+        dan pembayaran tetap perlu Anda tandai "Lunas" secara manual setelah memverifikasi mutasi/bukti
+        transfer — ini yang membuat alurnya aman tanpa perlu integrasi payment gateway pihak ketiga.
+      </div>
+      <div class="form-field"><label>Nama Bank</label><input class="textbox" style="margin-top:0;" id="st-bank_name" value="${s.bank_name||''}" placeholder="BCA / Mandiri / BRI"></div>
+      <div class="form-field"><label>Nomor Rekening</label><input class="textbox" style="margin-top:0;" id="st-bank_account_number" value="${s.bank_account_number||''}"></div>
+      <div class="form-field"><label>Atas Nama</label><input class="textbox" style="margin-top:0;" id="st-bank_account_name" value="${s.bank_account_name||''}"></div>
+      <div class="form-field"><label>URL Gambar QRIS</label><input class="textbox" style="margin-top:0;" id="st-qris_image_url" value="${s.qris_image_url||''}" placeholder="https://... (tempel link gambar QRIS statis Anda)"></div>
+      <button class="btn-checkout" style="margin-top:8px;" onclick="saveSettings()">Simpan Pengaturan</button>
+    </div>`;
+}
+
+function wireSettingsInputs(){ /* inputs are read directly on save, nothing to wire live */ }
+
+function copyOrderLink(){
+  const box = document.getElementById("order-link-box");
+  box.select();
+  navigator.clipboard.writeText(box.value).then(()=>{
+    toast("Link pemesanan disalin ke clipboard.");
+  }).catch(()=>{
+    toast("Gagal menyalin otomatis, silakan salin manual dari kotak teks.", "error");
+  });
+}
+
+async function saveSettings(){
+  const keys = ["store_name","store_tagline","store_hours","store_location","store_whatsapp","bank_name","bank_account_number","bank_account_name","qris_image_url"];
+  const payload = {};
+  keys.forEach(k => { payload[k] = document.getElementById("st-"+k).value.trim(); });
+  setSyncing(true);
+  try{
+    await api("PUT","/api/settings", payload);
+    await loadAllData();
+    toast("Pengaturan tersimpan dan langsung berlaku di link pemesanan online.");
+  }catch(e){ setSyncing(false, true); toast(e.message, "error"); }
+}
+
 /* ---------------- INIT: restore session if cookie still valid ---------------- */
 (async function init(){
+  try{
+    const statusRes = await fetch("/api/setup/status");
+    const status = await statusRes.json();
+    if(!status.alreadySetup){
+      window.location.href = "/setup.html";
+      return;
+    }
+  }catch(e){ /* ignore, fall through to normal login flow */ }
   try{
     const me = await api("GET","/api/auth/me");
     state.user = me;

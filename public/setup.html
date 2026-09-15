@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup Awal — HokPOS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+  * { box-sizing:border-box; margin:0; padding:0; font-family:'IBM Plex Sans',Arial,sans-serif; }
+  .disp { font-family:'Space Grotesk',Arial,sans-serif; }
+  body { background:#F1E9D8; color:#201D1B; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .box { width:400px; max-width:100%; background:#fff; border:1px solid #E2D8C0; border-radius:16px; padding:32px; }
+  h1 { font-size:22px; margin-bottom:8px; }
+  p.desc { font-size:13.5px; color:#77705F; margin-bottom:24px; line-height:1.6; }
+  label { font-size:12.5px; font-weight:600; display:block; margin-bottom:6px; }
+  .field-box { display:flex; align-items:center; border:1px solid #D8CDB4; border-radius:10px; padding:10px 12px; margin-bottom:16px; background:#fff; }
+  .field-box input { border:none; outline:none; font-size:14px; width:100%; }
+  .err { color:#B3261E; font-size:12.5px; margin-bottom:12px; display:none; }
+  .ok { color:#4F6F52; font-size:13.5px; margin-bottom:12px; display:none; text-align:center; }
+  button { width:100%; background:#B3261E; color:#fff; border:none; border-radius:999px; padding:12px 0; font-weight:600; font-size:14.5px; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:not-allowed; }
+  .already { text-align:center; font-size:14px; color:#77705F; }
+  a { color:#B3261E; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div id="form-area">
+      <h1 class="disp">Setup Akun Admin</h1>
+      <p class="desc">Ini hanya perlu dilakukan <b>satu kali</b> — untuk membuat satu-satunya akun admin HokPOS. Setelah dibuat, halaman ini otomatis terkunci.</p>
+      <label>Username</label>
+      <div class="field-box"><input id="su-username" placeholder="admin" value="admin"></div>
+      <label>Nama Tampilan</label>
+      <div class="field-box"><input id="su-name" placeholder="Admin Utama" value="Admin Utama"></div>
+      <label>Password (minimal 8 karakter)</label>
+      <div class="field-box"><input id="su-password" type="password" placeholder="••••••••"></div>
+      <label>Ulangi Password</label>
+      <div class="field-box"><input id="su-password2" type="password" placeholder="••••••••"></div>
+      <div class="err" id="su-error"></div>
+      <div class="ok" id="su-ok"></div>
+      <button id="su-btn" onclick="submitSetup()">Buat Akun Admin</button>
+    </div>
+    <div class="already" id="already-area" style="display:none;">
+      Akun admin sudah pernah dibuat sebelumnya.<br><br>
+      <a href="/">Buka halaman login →</a>
+    </div>
+  </div>
+<script>
+async function checkStatus(){
+  try{
+    const res = await fetch('/api/setup/status');
+    const data = await res.json();
+    if(data.alreadySetup){
+      document.getElementById('form-area').style.display = 'none';
+      document.getElementById('already-area').style.display = 'block';
+    }
+  }catch(e){}
+}
+async function submitSetup(){
+  const username = document.getElementById('su-username').value.trim();
+  const name = document.getElementById('su-name').value.trim();
+  const password = document.getElementById('su-password').value;
+  const password2 = document.getElementById('su-password2').value;
+  const errBox = document.getElementById('su-error');
+  const okBox = document.getElementById('su-ok');
+  const btn = document.getElementById('su-btn');
+  errBox.style.display='none'; okBox.style.display='none';
+
+  if(!username || !name || !password){ errBox.style.display='block'; errBox.textContent='Semua kolom wajib diisi.'; return; }
+  if(password.length < 8){ errBox.style.display='block'; errBox.textContent='Password minimal 8 karakter.'; return; }
+  if(password !== password2){ errBox.style.display='block'; errBox.textContent='Konfirmasi password tidak cocok.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  try{
+    const res = await fetch('/api/setup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username, name, password })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Gagal membuat akun.');
+    okBox.style.display='block';
+    okBox.textContent = 'Akun admin berhasil dibuat! Mengarahkan ke halaman login...';
+    setTimeout(()=> window.location.href = '/', 1500);
+  }catch(e){
+    errBox.style.display='block'; errBox.textContent = e.message;
+    btn.disabled = false; btn.textContent = 'Buat Akun Admin';
+  }
+}
+checkStatus();
+</script>
+</body>
+</html>
